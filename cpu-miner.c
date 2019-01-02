@@ -101,6 +101,7 @@ enum algos {
 	ALGO_LUFFA,       /* Luffa (Joincoin, Doom) */
 	ALGO_LYRA2,       /* Lyra2RE */
 	ALGO_LYRA2REV2,   /* Lyra2REv2 (Vertcoin) */
+	ALGO_LYRA2REV3,   /* Lyra2REv3 (VIPSTARCOIN-MV) */
 	ALGO_MYR_GR,      /* Myriad Groestl */
 	ALGO_NIST5,       /* Nist5 */
 	ALGO_PENTABLAKE,  /* Pentablake */
@@ -161,6 +162,7 @@ static const char *algo_names[] = {
 	"luffa",
 	"lyra2re",
 	"lyra2rev2",
+	"lyra2rev3",
 	"myr-gr",
 	"nist5",
 	"pentablake",
@@ -319,6 +321,7 @@ Options:\n\
                           luffa        Luffa\n\
                           lyra2re      Lyra2RE\n\
                           lyra2rev2    Lyra2REv2 (Vertcoin)\n\
+			  lyra2rev3    Lyra2REv3 (VIPSTARCOIN-MV)\n\
                           myr-gr       Myriad-Groestl\n\
                           neoscrypt    NeoScrypt(128, 2, 1)\n\
                           nist5        Nist5\n\
@@ -601,7 +604,7 @@ static bool work_decode(const json_t *val, struct work *work)
 		allow_mininginfo = false;
 		data_size = 192;
 		adata_sz = 180/4;
-	} else if (opt_algo == ALGO_VIPSTAR) {
+	} else if (opt_algo == ALGO_VIPSTAR || opt_algo == ALGO_LYRA2REV3) {
 		data_size = 192;
 		adata_sz = data_size/4;
 	}
@@ -656,7 +659,7 @@ static bool work_decode(const json_t *val, struct work *work)
 				algo_names[opt_algo], work->height, netinfo);
 			net_blocks = work->height - 1;
 		}
-	} else if (opt_algo == ALGO_VIPSTAR) {
+	} else if (opt_algo == ALGO_VIPSTAR || opt_algo == ALGO_LYRA2REV3) {
 		work->data[45] = 0x00800000;
 		work->data[46] = 0x00000000;
 		work->data[47] = 0x000005a8;
@@ -1299,7 +1302,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work)
 		} else if (opt_algo == ALGO_DECRED) {
 			/* bigger data size : 180 + terminal hash ending */
 			data_size = 192;
-		} else if(opt_algo == ALGO_VIPSTAR){
+		} else if(opt_algo == ALGO_VIPSTAR || opt_algo == ALGO_LYRA2REV3){
 			data_size = 192;
 			adata_sz = data_size / 4;
 		}
@@ -1373,7 +1376,7 @@ start:
 		snprintf(s, 128, "{\"method\": \"getjob\", \"params\": {\"id\": \"%s\"}, \"id\":1}\r\n", rpc2_id);
 		val = json_rpc2_call(curl, rpc_url, rpc_userpass, s, NULL, 0);
 	} else {
-		if(opt_algo == ALGO_VIPSTAR){
+		if(opt_algo == ALGO_VIPSTAR || opt_algo == ALGO_LYRA2REV3){
 			val = json_rpc_call(curl, rpc_url, rpc_userpass,
 		                    have_gbt ? gbt_vips_req : getwork_req,
 		                    &err, have_gbt ? JSON_RPC_QUIET_404 : 0);
@@ -1837,6 +1840,7 @@ static void stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 			case ALGO_KECCAKC:
 			case ALGO_LBRY:
 			case ALGO_LYRA2REV2:
+			case ALGO_LYRA2REV3:
 			case ALGO_TIMETRAVEL:
 			case ALGO_BITCORE:
 			case ALGO_XEVAN:
@@ -2206,6 +2210,7 @@ static void *miner_thread(void *userdata)
 			case ALGO_DECRED:
 			case ALGO_VANILLA:
 			case ALGO_VIPSTAR:
+			case ALGO_LYRA2REV3:
 				max64 = 0x3fffffLL;
 				break;
 			case ALGO_SIA:
@@ -2289,6 +2294,9 @@ static void *miner_thread(void *userdata)
 			break;
 		case ALGO_LYRA2REV2:
 			rc = scanhash_lyra2rev2(thr_id, &work, max_nonce, &hashes_done);
+			break;
+		case ALGO_LYRA2REV3:
+			rc = scanhash_lyra2rev3(thr_id, &work, max_nonce, &hashes_done);
 			break;
 		case ALGO_MYR_GR:
 			rc = scanhash_myriad(thr_id, &work, max_nonce, &hashes_done);
@@ -2910,6 +2918,8 @@ void parse_arg(int key, char *arg)
 				i = opt_algo = ALGO_LYRA2;
 			else if (!strcasecmp("lyra2v2", arg))
 				i = opt_algo = ALGO_LYRA2REV2;
+			else if (!strcasecmp("lyra2v3", arg))
+				i = opt_algo = ALGO_LYRA2REV3;
 			else if (!strcasecmp("scryptjane", arg))
 				i = opt_algo = ALGO_SCRYPTJANE;
 			else if (!strcasecmp("sibcoin", arg))
